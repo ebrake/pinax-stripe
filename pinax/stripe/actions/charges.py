@@ -47,7 +47,7 @@ def capture(charge, amount=None, idempotency_key=None):
     sync_charge_from_stripe_data(stripe_charge)
 
 
-def _validate_create_params(customer, source, amount, application_fee, destination_account, destination_amount, on_behalf_of, statement_descriptor):
+def _validate_create_params(customer, source, amount, application_fee, destination_account, destination_amount, on_behalf_of, statement_descriptor_suffix):
     if not customer and not source:
         raise ValueError("Must provide `customer` or `source`.")
     if not isinstance(amount, decimal.Decimal):
@@ -69,7 +69,7 @@ def _validate_create_params(customer, source, amount, application_fee, destinati
     if destination_account and on_behalf_of:
         raise ValueError(
             "`destination_account` and `on_behalf_of` are mutualy exclusive")
-    if statement_descriptor and (len(statement_descriptor) > 22 or any(ext in statement_descriptor for ext in ["<",">","'","\""])):
+    if statement_descriptor_suffix and (len(statement_descriptor_suffix) > 22 or any(ext in statement_descriptor_suffix for ext in ["<",">","'","\""])):
         raise ValueError(
             "Statement descriptors are limited to 22 characters, cannot use the special characters <, >, ', or \", and must not consist solely of numbers.")
 
@@ -78,7 +78,7 @@ def create(
     send_receipt=settings.PINAX_STRIPE_SEND_EMAIL_RECEIPTS, capture=True,
     email=None, destination_account=None, destination_amount=None,
     application_fee=None, on_behalf_of=None, idempotency_key=None,
-    stripe_account=None, statement_descriptor=None,
+    stripe_account=None, statement_descriptor_suffix=None,
 ):
     """
     Create a charge for the given customer or source.
@@ -101,7 +101,7 @@ def create(
         application_fee: used with `destination_account` to add a fee destined for the platform account
         on_behalf_of: Stripe account ID that these funds are intended for. Automatically set if you use the destination parameter.
         idempotency_key: Any string that allows retries to be performed safely.
-        statement_descriptor: Information to appear on the customer account statement.
+        statement_descriptor_suffix: Information to appear on the customer account statement.
 
     Returns:
         a pinax.stripe.models.Charge object
@@ -109,8 +109,7 @@ def create(
     # Handle customer as stripe_id for backward compatibility.
     if customer and not isinstance(customer, models.Customer):
         customer, _ = models.Customer.objects.get_or_create(stripe_id=customer)
-    _validate_create_params(customer, source, amount, application_fee, destination_account, destination_amount, on_behalf_of, statement_descriptor)
-    stripe_account_stripe_id = None
+    _validate_create_params(customer, source, amount, application_fee, destination_account, destination_amount, on_behalf_of, statement_descriptor_suffix)
     kwargs = dict(
         amount=utils.convert_amount_for_api(amount, currency),  # find the final amount
         currency=currency,
@@ -120,7 +119,7 @@ def create(
         description=description,
         capture=capture,
         idempotency_key=idempotency_key,
-        statement_descriptor=statement_descriptor,
+        statement_descriptor_suffix=statement_descriptor_suffix,
     )
     if destination_account:
         kwargs["destination"] = {"account": destination_account}
