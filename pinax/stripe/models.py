@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
 import decimal
@@ -39,6 +40,7 @@ class AccountRelatedStripeObjectMixin(models.Model):
     @property
     def stripe_account_stripe_id(self):
         return getattr(self.stripe_account, "stripe_id", None)
+    stripe_account_stripe_id.fget.short_description = "Stripe Account"
 
     class Meta:
         abstract = True
@@ -69,6 +71,7 @@ class StripeAccountFromCustomerMixin(object):
     @property
     def stripe_account_stripe_id(self):
         return self.stripe_account.stripe_id if self.stripe_account else None
+    stripe_account_stripe_id.fget.short_description = "Stripe Account"
 
 
 @python_2_unicode_compatible
@@ -279,7 +282,11 @@ class Customer(AccountRelatedStripeObject):
         if self.user:
             return str(self.user)
         elif self.id:
-            return ", ".join(str(user) for user in self.users.all())
+            users = self.users.all()
+            if users:
+                return ", ".join(str(user) for user in users)
+        if self.stripe_id:
+            return "No User(s) ({})".format(self.stripe_id)
         return "No User(s)"
 
     def __repr__(self):
@@ -488,6 +495,21 @@ class Charge(StripeAccountFromCustomerMixin, StripeObject):
 
     objects = ChargeManager()
 
+    def __str__(self):
+        info = []
+        if not self.paid:
+            info += ["unpaid"]
+        if not self.captured:
+            info += ["uncaptured"]
+        if self.refunded:
+            info += ["refunded"]
+        currency = CURRENCY_SYMBOLS.get(self.currency, "")
+        return "{}{}{}".format(
+            currency,
+            self.total_amount,
+            " ({})".format(", ".join(info)) if info else "",
+        )
+
     def __repr__(self):
         return "Charge(pk={!r}, customer={!r}, source={!r}, amount={!r}, captured={!r}, paid={!r}, stripe_id={!r})".format(
             self.pk,
@@ -498,6 +520,13 @@ class Charge(StripeAccountFromCustomerMixin, StripeObject):
             self.paid,
             self.stripe_id,
         )
+
+    @property
+    def total_amount(self):
+        amount = self.amount if self.amount else 0
+        amount_refunded = self.amount_refunded if self.amount_refunded else 0
+        return amount - amount_refunded
+    total_amount.fget.short_description = "Σ amount"
 
     @property
     def stripe_charge(self):
@@ -533,7 +562,7 @@ class Account(StripeObject):
     decline_charge_on_cvc_failure = models.BooleanField(default=False)
     default_currency = models.CharField(max_length=3)
     details_submitted = models.BooleanField(default=False)
-    display_name = models.TextField(blank=False, null=False)
+    display_name = models.TextField(blank=True, null=True)
     email = models.TextField(null=True, blank=True)
 
     legal_entity_address_city = models.TextField(null=True, blank=True)
@@ -592,12 +621,12 @@ class Account(StripeObject):
         return stripe.Account.retrieve(self.stripe_id)
 
     def __str__(self):
-        return "{} - {}".format(self.display_name, self.stripe_id)
+        return "{} - {}".format(self.display_name or "", self.stripe_id)
 
     def __repr__(self):
         return "Account(pk={!r}, display_name={!r}, type={!r}, authorized={!r}, stripe_id={!r})".format(
             self.pk,
-            self.display_name,
+            self.display_name or "",
             self.type,
             self.authorized,
             self.stripe_id,

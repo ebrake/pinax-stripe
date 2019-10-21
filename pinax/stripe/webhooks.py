@@ -98,7 +98,6 @@ class Webhook(with_metaclass(Registerable, object)):
             json.dumps(
                 evt.to_dict(),
                 sort_keys=True,
-                cls=stripe.StripeObjectEncoder
             )
         )
         self.event.valid = self.is_event_valid(self.event.webhook_message["data"], self.event.validated_message["data"])
@@ -132,7 +131,7 @@ class Webhook(with_metaclass(Registerable, object)):
             self.event.save()
         except Exception as e:
             data = None
-            if isinstance(e, stripe.StripeError):
+            if isinstance(e, stripe.error.StripeError):
                 data = e.http_body
             exceptions.log_exception(data=data, exception=e, event=self.event)
             raise e
@@ -164,12 +163,11 @@ class AccountApplicationDeauthorizeWebhook(Webhook):
 
         When this event is for a connected account we should not be able to
         fetch the event anymore (since we have been disconnected).
+        But there might be multiple connections (e.g. for Dev/Prod).
 
-        Therefore we try to retrieve the event:
-         - in case of PermissionError exception, everything is perfectly normal.
-           It means the account has been deauthorized.
-         - In case no exception has been caught, then, most likely, the event has been forged
-           to make you believe the account has been disabled despite it is still functioning.
+        Therefore we try to retrieve the event, and handle a
+        PermissionError exception to be expected (since we cannot access the
+        account anymore).
         """
         try:
             super(AccountApplicationDeauthorizeWebhook, self).validate()
@@ -178,11 +176,8 @@ class AccountApplicationDeauthorizeWebhook(Webhook):
                 stripe_account_id = self.stripe_account.stripe_id
                 if not(stripe_account_id in str(exc) and obfuscate_secret_key(settings.PINAX_STRIPE_SECRET_KEY) in str(exc)):
                     raise exc
-        else:
-            if self.stripe_account:
-                raise ValueError("The remote account is still valid. This might be a hostile event")
-        self.event.valid = True
-        self.event.validated_message = self.event.webhook_message
+            self.event.valid = True
+            self.event.validated_message = self.event.webhook_message
 
     def process_webhook(self):
         if self.stripe_account is not None:

@@ -86,12 +86,10 @@ class CreateCustomAccountView(FormView):
     form_class = InitialCustomAccountForm
     template_name = '<path to your template>'
 
-    def get_form_kwargs(self, *args, **kwargs):
+    def get_form_kwargs(self):
         form_kwargs = super(
-            CreateBankAccountView, self
-        ).get_form_kwargs(
-            *args, **kwargs
-        )
+            CreateCustomAccountView, self
+        ).get_form_kwargs()
         initial = form_kwargs.pop('initial', {})
         form_kwargs['request'] = self.request
         form_kwargs['country'] = 'US'
@@ -253,7 +251,7 @@ UserAccount.filter(user=user, account=account, customer=customer).exists()
 ### Retrieve a Connected Customer
 
 ```python
-customer = pinax.stripe.actions.customer.get_customer_for_user(user, stripe_account=account)
+customer = pinax.stripe.actions.customers.get_customer_for_user(user, stripe_account=account)
 
 # Under the hood, the M2M through model will be used to filter the relevant customer among all candidates
 

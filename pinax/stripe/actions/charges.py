@@ -78,7 +78,7 @@ def create(
     send_receipt=settings.PINAX_STRIPE_SEND_EMAIL_RECEIPTS, capture=True,
     email=None, destination_account=None, destination_amount=None,
     application_fee=None, on_behalf_of=None, idempotency_key=None,
-    statement_descriptor=None,
+    stripe_account=None, statement_descriptor=None,
 ):
     """
     Create a charge for the given customer or source.
@@ -110,6 +110,7 @@ def create(
     if customer and not isinstance(customer, models.Customer):
         customer, _ = models.Customer.objects.get_or_create(stripe_id=customer)
     _validate_create_params(customer, source, amount, application_fee, destination_account, destination_amount, on_behalf_of, statement_descriptor)
+    stripe_account_stripe_id = None
     kwargs = dict(
         amount=utils.convert_amount_for_api(amount, currency),  # find the final amount
         currency=currency,
